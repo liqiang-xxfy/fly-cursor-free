@@ -3,16 +3,20 @@
     import { storeToRefs } from "pinia";
     import { ref, onMounted } from "vue";
     import { ElMessage } from "element-plus";
+    import { useI18n } from 'vue-i18n'; // Import useI18n
+    
+    // Initialize i18n
+    const { t } = useI18n();
 
     const formRef = ref(null);
 
     const rules = ref({
-        EMAIL_DOMAIN: [{ required: true, message: "请输入域名", trigger: "blur" }],
+        EMAIL_DOMAIN: [{ required: true, message: t('settings.domainRequired'), trigger: "blur" }],
         RECEIVING_EMAIL: [
-            { required: true, message: "请输入tempmail邮箱", trigger: "blur" },
-            { type: "email", message: "请输入正确的邮箱格式", trigger: ["blur", "change"] },
+            { required: true, message: t('settings.emailRequired'), trigger: "blur" },
+            { type: "email", message: t('settings.emailFormat'), trigger: ["blur", "change"] },
         ],
-        RECEIVING_EMAIL_PIN: [{ required: true, message: "请输入PIN码", trigger: "blur" }],
+        RECEIVING_EMAIL_PIN: [{ required: true, message: t('settings.pinRequired'), trigger: "blur" }],
     });
 
     const appStore = useAppStore();
@@ -52,14 +56,14 @@
         try {
             let setResult = await window.api.setAppConfig(newConfig);
             if (setResult.success) {
-                ElMessage.success(`修改配置成功`);
+                ElMessage.success(t('settings.saveSuccess'));
                 await appStore.fetchAppConfig();
             } else {
-                ElMessage.error("修改配置失败");
+                ElMessage.error(t('settings.saveFailed'));
             }
         } catch (error) {
             console.log("error1 :>> ", error);
-            ElMessage.error("修改配置失败");
+            ElMessage.error(t('settings.saveFailed'));
         }
     };
 
@@ -71,31 +75,31 @@
 <template>
     <div v-if="localConfig" class="settings-container">
         <el-form ref="formRef" :model="localConfig" :rules="rules" label-width="150px" style="max-width: 450px">
-            <el-form-item label="域名" prop="EMAIL_DOMAIN">
-                <el-input v-model="localConfig.EMAIL_DOMAIN" placeholder="个人域名 例：flyxx.com 阿里云1元购买" />
+            <el-form-item :label="t('settings.domain')" prop="EMAIL_DOMAIN">
+                <el-input v-model="localConfig.EMAIL_DOMAIN" :placeholder="t('settings.domainPlaceholder')" />
             </el-form-item>
-            <el-form-item label="tempmail邮箱" prop="RECEIVING_EMAIL">
-                <el-input v-model="localConfig.RECEIVING_EMAIL" placeholder="临时邮箱 https://tempmail.plus免费申请" />
+            <el-form-item :label="t('settings.receivingEmail')" prop="RECEIVING_EMAIL">
+                <el-input v-model="localConfig.RECEIVING_EMAIL" :placeholder="t('settings.emailPlaceholder')" />
             </el-form-item>
-            <el-form-item label="PIN码" prop="RECEIVING_EMAIL_PIN">
-                <el-input v-model="localConfig.RECEIVING_EMAIL_PIN" placeholder="临时邮箱PIN码" />
+            <el-form-item :label="t('settings.emailPin')" prop="RECEIVING_EMAIL_PIN">
+                <el-input v-model="localConfig.RECEIVING_EMAIL_PIN" :placeholder="t('settings.pinPlaceholder')" />
             </el-form-item>
             <el-form-item label="">
                 <p class="open-link" @click.prevent="openLink('https://tempmail.plus')">
-                    临时邮箱申请地址:https://tempmail.plus
+                    {{ t('settings.tempMailLink') }}
                 </p>
             </el-form-item>
             <el-form-item label="">
                 <p class="open-link" @click.prevent="openLink('https://www.bilibili.com/opus/951275934028136469')">
-                    Cloudflare路由无限邮箱配置教程
+                    {{ t('settings.cloudflareTutorial') }}
                 </p>
             </el-form-item>
             <el-form-item>
-                <el-button type="primary" @click="saveConfig">保存</el-button>
+                <el-button type="primary" @click="saveConfig">{{ t('settings.save') }}</el-button>
             </el-form-item>
         </el-form>
     </div>
-    <div v-else>正在加载配置...</div>
+    <div v-else>{{ t('settings.loading') }}</div>
 </template>
 
 <style scoped>

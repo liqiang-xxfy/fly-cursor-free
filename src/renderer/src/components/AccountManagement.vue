@@ -6,6 +6,11 @@
     import { useAppStore } from "../stores/app";
     import { storeToRefs } from "pinia";
     import { UserFilled } from "@element-plus/icons-vue";
+    import { useI18n } from 'vue-i18n'; // Import useI18n
+    
+    // Initialize i18n
+    const { t } = useI18n();
+    
     const emit = defineEmits(["show-use-account-dialog"]);
 
     const appStore = useAppStore();
@@ -42,8 +47,8 @@
         // ... 其他字段可以按需添加
     });
     const formRules = {
-        email: [{ required: true, message: "请输入邮箱地址", trigger: "blur" }],
-        accessToken: [{ required: true, message: "请输入token", trigger: "blur" }],
+        email: [{ required: true, message: t('account.emailRequired'), trigger: "blur" }],
+        accessToken: [{ required: true, message: t('account.tokenRequired'), trigger: "blur" }],
     };
 
     // 进度条状态
@@ -163,7 +168,7 @@
     const formatExpTimestamp = (expTimestamp) => {
         if (!expTimestamp) {
             return {
-                label: "无令牌",
+                label: t('home.noToken'),
                 type: "danger",
                 isExpired: true,
             };
@@ -171,7 +176,7 @@
         const now = Date.now();
         if (expTimestamp < now) {
             return {
-                label: "已过期",
+                label: t('home.expired'),
                 type: "danger",
                 isExpired: true,
             };
@@ -182,7 +187,7 @@
         const days = Math.floor(remainingMilliseconds / (1000 * 60 * 60 * 24));
         if (days > 0) {
             return {
-                label: `${days}天`,
+                label: `${days}${t('home.days')}`,
                 type: "success",
                 isExpired: false,
             };
@@ -191,7 +196,7 @@
         const hours = Math.floor(remainingMilliseconds / (1000 * 60 * 60));
         if (hours > 0) {
             return {
-                label: `${hours}小时`,
+                label: `${hours}${t('home.hours')}`,
                 type: "warning",
                 isExpired: false,
             };
@@ -200,10 +205,89 @@
         // 小于一小时，显示分钟。向上取整以避免显示0分钟。
         const minutes = Math.ceil(remainingMilliseconds / (1000 * 60));
         return {
-            label: `${minutes}分钟`,
+            label: `${minutes}${t('home.minutes')}`,
             type: "danger",
             isExpired: false,
         };
+    };
+
+    // --- 核心业务逻辑函数 ---
+
+    // 获取账户数据
+    const fetchAccounts = async () => {
+        loading.value = true;
+        try {
+            const result = await window.api.accounts.getAccounts({
+                page: pagination.currentPage,
+                pageSize: pagination.pageSize,
+                sortBy: sortOptions.prop,
+                sortOrder: sortOptions.order,
+            });
+
+            // 处理数据，添加计算属性
+            allData.value = result.data.map((item) => {
+                // 计算订阅状态显示文本
+                let remainingDays = item.daysRemainingOnTrial
+                    ? item.daysRemainingOnTrial
+                    : calculateRemainingDays(item.registerTimeStamp);
+                if (item.membershipType === SUBSCRIBE_FREE_NAME) {
+                    remainingDays = 0;
+                }
+                let membershipTypeShow = "";
+                if (item.membershipType === SUBSCRIBE_FREE_NAME) {
+                    membershipTypeShow = "（已失效）" + item.membershipType;
+                } else if (item.membershipType === SUBSCRIBE_PRO_NAME) {
+                    membershipTypeShow = "（" + remainingDays + "天试用）" + item.membershipType;
+                } else if (item.membershipType) {
+                    membershipTypeShow = item.membershipType;
+                    remainingDays = 999;
+                } else {
+                    membershipTypeShow = "";
+                }
+
+                // 计算令牌过期时间显示
+                const expTimestamp = getTokenExpTimestamp(item.accessToken);
+                const expTimestampShow = formatExpTimestamp(expTimestamp);
+
+                // 计算模型使用量百分比
+                let percentage = 0;
+                let percentageStatus = "";
+                if (item.modelUsage && item.modelUsage.total > 0) {
+                    percentage = Math.round((item.modelUsage.used / item.modelUsage.total) * 100);
+                    if (percentage < 80) {
+                        percentageStatus = "";
+                    } else if (percentage < 90) {
+                        percentageStatus = "warning";
+                    } else {
+                        percentageStatus = "exception";
+                    }
+                }
+
+                // 确定是否显示更新会话令牌按钮
+                const isShowUpdateSessionToken = !!item.WorkosCursorSessionToken && isShowUpdateSessionTokenConst;
+
+                // 确定最优token
+                const optimalToken = item.accessToken || item.WorkosCursorSessionToken;
+
+                return {
+                    ...item,
+                    membershipTypeShow,
+                    expTimestampShow,
+                    percentage,
+                    percentageStatus,
+                    isShowUpdateSessionToken,
+                    optimalToken,
+                    remainingDays,
+                };
+            });
+
+            pagination.total = result.total;
+        } catch (error) {
+            console.error("获取账户数据时发生错误:", error);
+            ElMessage.error(t('account.fetchError') + error.message);
+        } finally {
+            loading.value = false;
+        }
     };
 
     /**
@@ -225,184 +309,60 @@
 
         // 计算剩余毫秒数并转换为天数
         const remainingMilliseconds = expiryDate - now;
+        // 计算剩余天数，1天=24小时*60分钟*60秒*1000毫秒，向上取整保证有剩余时间时显示为1天
         const remainingDays = Math.ceil(remainingMilliseconds / (1000 * 60 * 60 * 24));
         return remainingDays;
     };
 
-    /**
-     * 格式化时间戳
-     * @param {number} timestamp - 时间戳 (毫秒)
-     * @returns {string|null} 格式化后的日期时间字符串 "YYYY-MM-DD HH:MM:SS" 或 null
-     */
-    const formatTimestamp = (timestamp) => {
-        if (!timestamp) {
-            return null;
-        }
-        const date = new Date(timestamp);
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, "0");
-        const day = date.getDate().toString().padStart(2, "0");
-        const hours = date.getHours().toString().padStart(2, "0");
-        const minutes = date.getMinutes().toString().padStart(2, "0");
-        const seconds = date.getSeconds().toString().padStart(2, "0");
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-    };
-
-    // --- 数据获取与处理 ---
-
-    // 从后端获取账户列表
-    const fetchAccounts = async () => {
-        loading.value = true;
-        try {
-            // 确保数据库目录存在
-            await window.api.accounts.ensureDatabaseDirectoryExists();
-            const sortOrder = sortOptions.order === "ascending" ? "ASC" : "DESC";
-            const { accounts, total } = await window.api.accounts.listAccounts({
-                sortByRegisterTime: sortOrder,
-                page: pagination.currentPage,
-                pageSize: pagination.pageSize,
-            }); //DESC 降序 | ASC 升序
-
-            pagination.total = total;
-
-            // 最佳实践：检查当前页是否仍然有效
-            const totalPages = Math.ceil(pagination.total / pagination.pageSize);
-            if (pagination.currentPage > 1 && pagination.currentPage > totalPages) {
-                // 如果当前页码超过了新的总页数（并且不是第一页），则自动跳转到最后一页并重新获取数据
-                pagination.currentPage = totalPages > 0 ? totalPages : 1;
-                await fetchAccounts(); // 重新调用以获取最后一页的数据
-                return; // 终止当前函数的执行，因为数据将由新的调用来填充
-            }
-
-            // 保存之前的loading状态
-            // const previousLoadingState = { ...rowLoadingState.value };
-
-            const now = Date.now();
-            allData.value = accounts.map((acc) => {
-                let remainingDays = acc.daysRemainingOnTrial
-                    ? acc.daysRemainingOnTrial
-                    : calculateRemainingDays(acc.registerTimeStamp);
-                if (acc.membershipType === SUBSCRIBE_FREE_NAME) {
-                    remainingDays = 0;
-                }
-                let membershipTypeShow;
-                if (acc.membershipType === SUBSCRIBE_FREE_NAME) {
-                    membershipTypeShow = "已失效";
-                } else if (acc.membershipType === SUBSCRIBE_PRO_NAME) {
-                    membershipTypeShow = remainingDays + "天试用";
-                } else if (acc.membershipType) {
-                    membershipTypeShow = acc.membershipType;
-                    remainingDays = 999;
-                } else {
-                    membershipTypeShow = "";
-                    remainingDays = 999;
-                }
-                //accessToken 优先级高于 WorkosCursorSessionToken
-                const expTimeAccessToken = getTokenExpTimestamp(acc.accessToken);
-                const expTimeSessionToken = getTokenExpTimestamp(acc.WorkosCursorSessionToken);
-
-                let expTimestamp, optimalToken;
-                if (expTimeAccessToken) {
-                    expTimestamp = expTimeAccessToken;
-                    optimalToken = getRealAccessToken(acc.accessToken);
-                } else if (expTimeSessionToken) {
-                    expTimestamp = expTimeSessionToken;
-                    optimalToken = getRealAccessToken(acc.WorkosCursorSessionToken);
-                } else {
-                    expTimestamp = null;
-                    optimalToken = null;
-                }
-                const expTimestampShow = formatExpTimestamp(expTimestamp);
-
-                const percentage = acc.modelUsageTotal > 0 ? (acc.modelUsageUsed / acc.modelUsageTotal) * 100 : 0;
-                const percentageStatus = percentage > 99.9 ? "exception" : percentage > 85 ? "warning" : "success";
-
-                return {
-                    ...acc,
-                    register_time: formatTimestamp(acc.register_time),
-                    remainingDays,
-                    membershipTypeShow,
-                    modelUsage: {
-                        used: acc.modelUsageUsed ?? 0,
-                        total: acc.modelUsageTotal ?? 0,
-                    },
-                    expTimeAccessToken,
-                    expTimeSessionToken,
-                    expTimestamp,
-                    optimalToken,
-                    expTimestampShow,
-                    percentage,
-                    percentageStatus,
-                    isShowUpdateSessionToken:
-                        isShowUpdateSessionTokenConst &&
-                        !expTimeAccessToken &&
-                        expTimeSessionToken &&
-                        expTimeSessionToken > now,
-                };
-            });
-
-            // 恢复之前的loading状态
-            // rowLoadingState.value = previousLoadingState;
-
-            console.log("查询到", allData.value.length, "条数据");
-            console.log("allData.value :>> ", allData.value);
-        } catch (error) {
-            console.error("获取账户列表失败:", error);
-            ElMessage.error("获取账户列表失败: " + error.message);
-        } finally {
-            loading.value = false;
-        }
-    };
-
-    // --- 事件处理 ---
-
-    // 导入按钮点击
+    // 处理导入按钮点击
     const handleImport = async () => {
-        const handleId = `import-${Date.now()}`;
         try {
-            progressState.title = "正在导入账户";
+            const handleId = `import-${Date.now()}`;
+            progressState.title = t('account.importing');
             progressState.visible = true;
             progressState.percentage = 0;
-            progressState.message = "等待用户选择文件...";
+            progressState.message = t('account.preparing');
             progressState.status = "pending";
             progressState.handleId = handleId;
 
-            const result = await window.api.accounts.importAccountsFromJSON(handleId);
-
-            if (!result.canceled) {
-                // ElMessage.success(`导入完成！成功 ${result.successful} 个，失败 ${result.failed} 个。`);
+            const importResult = await window.api.accounts.importAccounts(handleId);
+            console.log("导入结果 :>> ", importResult);
+            if (importResult.success) {
+                ElMessage.success(t('account.importSuccess'));
                 await fetchAccounts();
             } else {
-                progressState.visible = false;
+                ElMessage.error(t('account.importFailed') + importResult.message);
             }
+            // 进度条由主进程消息控制关闭
         } catch (error) {
             console.log("导入操作失败 :>> ", error);
-            // ElMessage.error("导入操作失败: " + error.message);
+            ElMessage.error(t('account.importError') + error.message);
+            progressState.visible = false;
         }
     };
 
-    // 导出按钮点击
+    // 处理导出按钮点击
     const handleExport = async () => {
-        const handleId = `export-${Date.now()}`;
         try {
-            progressState.title = "正在导出账户";
+            const handleId = `export-${Date.now()}`;
+            progressState.title = t('account.exporting');
             progressState.visible = true;
             progressState.percentage = 0;
-            progressState.message = "等待用户选择保存位置...";
+            progressState.message = t('account.preparing');
             progressState.status = "pending";
             progressState.handleId = handleId;
 
-            const result = await window.api.accounts.exportAccountsToJSON(handleId);
-
-            if (!result.canceled) {
-                // ElMessage.success(`账户已成功导出到: ${result.filePath}`);
+            const exportResult = await window.api.accounts.exportAccounts(handleId);
+            console.log("导出结果 :>> ", exportResult);
+            if (exportResult.success) {
+                ElMessage.success(t('account.exportSuccess'));
             } else {
-                // ElMessage.info("用户取消了导出操作。");
-                progressState.visible = false;
+                ElMessage.error(t('account.exportFailed') + exportResult.message);
             }
+            // 进度条由主进程消息控制关闭
         } catch (error) {
             console.log("导出操作失败 :>> ", error);
-            ElMessage.error("导出操作失败: " + error.message);
+            ElMessage.error(t('account.exportError') + error.message);
             progressState.visible = false;
         }
     };
@@ -419,69 +379,30 @@
     // eslint-disable-next-line no-unused-vars
     const importCurrentLoginAccount = () => {
         if (!cursorAccountsInfo.value.email) {
-            ElMessage.error("当前没有登录账户。");
+            ElMessage.error(t('account.noCurrentAccount'));
             return;
         }
         accountForm.value = { ...cursorAccountsInfo.value };
     };
 
-    // // 编辑按钮点击
-    // const handleEdit = async (row) => {
-
-    //     try {
-    //         isEditMode.value = true;
-    //         // 使用 Object.assign 确保响应性
-    //         Object.assign(accountForm.value, { ...row });
-    //         dialogVisible.value = true;
-    //     } catch (error) {
-    //         console.error("编辑操作发生错误:", error);
-    //         ElMessage.error("操作失败：" + error.message);
-    //     }
-    // };
-
-    // // 删除按钮点击
-    // const handleDelete = (row) => {
-    //     ElMessageBox.confirm(`确定要删除邮箱为 "${row.email}" 的账户吗？`, "警告", {
-    //         confirmButtonText: "确定",
-    //         cancelButtonText: "取消",
-    //         type: "warning",
-    //     })
-    //         .then(async () => {
-    //             try {
-    //                 const success = await window.api.accounts.deleteAccount(row.email);
-    //                 if (success) {
-    //                     ElMessage.success("删除成功！");
-    //                     await fetchAccounts();
-    //                 } else {
-    //                     ElMessage.error("删除失败，未找到该账户。");
-    //                 }
-    //             } catch (error) {
-    //                 ElMessage.error("删除失败: " + error.message);
-    //             }
-    //         })
-    //         .catch(() => {
-    //             // 用户取消
-    //         });
-    // };
-
     const handleUpdateSessionToken = async (row) => {
         if (!row.WorkosCursorSessionToken) {
-            ElMessage.error("该账户没有刷新令牌。");
+            ElMessage.error(t('account.noRefreshToken'));
             return;
         }
 
         if (rowLoadingStateSessionToken.value[row.email]) {
             return;
         }
-        ElMessageBox.confirm("使用第三方接口刷新60天令牌，该接口每个ip每天5次，可能有未知风险，确定刷新吗？", "注意", {
-            confirmButtonText: "确定",
-            cancelButtonText: "取消",
+        ElMessageBox.confirm(t('account.refreshTokenWarning'), t('account.notice'), {
+            confirmButtonText: t('dialogs.confirm'),
+            cancelButtonText: t('dialogs.cancel'),
             type: "warning",
         }).then(async () => {
             rowLoadingStateSessionToken.value[row.email] = true;
 
             // 获取 api tokens
-            console.log("正在刷新 token ");
+            console.log(t('account.refreshingToken'));
             const updateData = {
                 email: row.email,
             };
@@ -493,8 +414,8 @@
                 await fetchAccounts();
                 appStore.setActiveEmail(row.email);
             } catch (error) {
-                console.error("获取 api tokens 失败:", error);
-                ElMessage.error("刷新 token 失败！");
+                console.error(t('account.getTokenError'), error);
+                ElMessage.error(t('account.refreshTokenFailed'));
             } finally {
                 rowLoadingStateSessionToken.value[row.email] = false;
             }
@@ -504,7 +425,7 @@
     const handleUpdateAccount = async (row) => {
         let accessToken = row.optimalToken;
         if (!accessToken) {
-            ElMessage.error("该账户没有访问令牌。");
+            ElMessage.error(t('account.noAccessToken'));
             return;
         }
         // 设置当前行的loading状态
@@ -530,8 +451,8 @@
             await fetchAccounts();
             appStore.setActiveEmail(row.email);
         } catch (error) {
-            console.error("更新订阅信息时发生意外错误:", error);
-            ElMessage.error("更新订阅信息失败");
+            console.error(t('account.updateSubscriptionError'), error);
+            ElMessage.error(t('account.updateSubscriptionFailed'));
         } finally {
             rowLoadingState.value[row.email] = false;
         }
@@ -539,7 +460,7 @@
 
     const handleUseAccount = (row) => {
         if (!row.optimalToken) {
-            ElMessage.error("该账户没有访问令牌。");
+            ElMessage.error(t('account.noAccessToken'));
             return;
         }
         emit("show-use-account-dialog", { ...row });
@@ -548,12 +469,12 @@
     // 批量删除按钮点击
     const handleDeleteBatch = () => {
         if (multipleSelection.value.length === 0) {
-            ElMessage.warning("请至少选择一个账户。");
+            ElMessage.warning(t('account.selectAccount'));
             return;
         }
-        ElMessageBox.confirm(`确定要删除选中的 ${multipleSelection.value.length} 个账户吗？`, "警告", {
-            confirmButtonText: "确定",
-            cancelButtonText: "取消",
+        ElMessageBox.confirm(`${t('account.confirmDeleteBatch1')} ${multipleSelection.value.length} ${t('account.confirmDeleteBatch2')}`, t('account.warning'), {
+            confirmButtonText: t('dialogs.confirm'),
+            cancelButtonText: t('dialogs.cancel'),
             type: "warning",
         })
             .then(async () => {
@@ -561,20 +482,20 @@
                     const handleId = `delete-batch-${Date.now()}`;
                     const emails = multipleSelection.value.map((item) => item.email);
 
-                    progressState.title = "正在批量删除";
+                    progressState.title = t('account.batchDeleting');
                     progressState.visible = true;
                     progressState.percentage = 0;
-                    progressState.message = "准备开始...";
+                    progressState.message = t('account.preparing');
                     progressState.status = "pending";
                     progressState.handleId = handleId;
 
                     const deletedCount = await window.api.accounts.deleteAccounts(emails, handleId);
-                    console.log(`成功删除了 ${deletedCount} 个账户。`);
+                    console.log(`${t('account.deleteSuccess1')} ${deletedCount} ${t('account.deleteSuccess2')}`);
                     // ElMessage.success(`成功删除了 ${deletedCount} 个账户。`);
                     await fetchAccounts();
                     multipleSelection.value = []; // 清空选择
                 } catch (error) {
-                    ElMessage.error("批量删除失败: " + error.message);
+                    ElMessage.error(t('account.batchDeleteError') + error.message);
                 }
             })
             .catch(() => {
@@ -590,15 +511,15 @@
                     const expTimestamp = getTokenExpTimestamp(accountForm.value.accessToken);
                     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
                     if (!emailRegex.test(accountForm.value.email)) {
-                        ElMessage.error("邮箱格式不正确");
+                        ElMessage.error(t('account.invalidEmail'));
                         return;
                     }
                     if (!expTimestamp) {
-                        ElMessage.error("token 无效");
+                        ElMessage.error(t('account.invalidToken'));
                         return;
                     }
                     if (expTimestamp < Date.now()) {
-                        ElMessage.error("token 已过期");
+                        ElMessage.error(t('account.expiredToken'));
                         return;
                     }
 
@@ -615,14 +536,14 @@
 
                     // 新增模式
                     await window.api.accounts.createOrUpdateAccount(saveData);
-                    ElMessage.success("新增成功！");
+                    ElMessage.success(t('account.addSuccess'));
                     dialogVisible.value = false;
 
                     await fetchAccounts();
                     appStore.setActiveEmail(accountForm.value.email);
                 } catch (error) {
                     console.log("error :>> ", error);
-                    ElMessage.error("操作失败：" + error.message);
+                    ElMessage.error(t('account.operationFailed') + error.message);
                 }
             }
         });
@@ -692,13 +613,13 @@
             >
                 <el-table-column type="selection" width="55" align="center" />
                 <el-table-column
-                    label="序号"
+                    :label="t('account.serialNumber')"
                     type="index"
                     width="60"
                     align="center"
                     :index="(index) => (pagination.currentPage - 1) * pagination.pageSize + index + 1"
                 />
-                <el-table-column prop="email" label="邮箱" min-width="100" show-overflow-tooltip>
+                <el-table-column prop="email" :label="t('account.email')" min-width="100" show-overflow-tooltip>
                     <template #default="scope">
                         <span style="position: relative; padding-left: 5px">
                             <el-icon
@@ -716,7 +637,7 @@
 
                 <el-table-column
                     prop="register_time"
-                    label="创建时间"
+                    :label="t('account.creationTime')"
                     min-width="100"
                     align="center"
                     sortable="custom"
@@ -729,7 +650,7 @@
                     </template>
                 </el-table-column>
 
-                <el-table-column label="订阅状态" width="100" align="center">
+                <el-table-column :label="t('account.subscriptionStatus')" width="100" align="center">
                     <template #default="scope">
                         <el-tag
                             v-if="scope.row.membershipTypeShow"
@@ -763,7 +684,7 @@
                     </template>
                 </el-table-column> -->
 
-                <el-table-column label="模型使用量" width="100" align="center">
+                <el-table-column :label="t('account.modelUsage')" width="100" align="center">
                     <template #default="scope">
                         <div v-if="scope.row.modelUsage.total">
                             <span>{{ scope.row.modelUsage.used }} / {{ scope.row.modelUsage.total }}</span>
@@ -775,22 +696,22 @@
                                 :show-text="false"
                             />
                         </div>
-                        <div v-else style="font-size: 12px; line-height: 23px">无限制</div>
+                        <div v-else style="font-size: 12px; line-height: 23px">{{ t('home.noLimit') }}</div>
                     </template>
                 </el-table-column>
 
-                <el-table-column fixed="right" label="操作" width="160" align="center">
+                <el-table-column fixed="right" :label="t('account.actions')" width="160" align="center">
                     <template #default="scope">
                         <template v-if="!scope.row.expTimestampShow.isExpired">
                             <el-button link type="success" size="small" @click="handleUseAccount(scope.row)">{{
-                                cursorAccountsInfo.email === scope.row.email ? "使用中" : "使用"
+                                cursorAccountsInfo.email === scope.row.email ? t('account.inUse') : t('account.use')
                             }}</el-button>
                             <el-button
                                 link
                                 type="primary"
                                 :loading="rowLoadingState[scope.row.email]"
                                 @click="handleUpdateAccount(scope.row)"
-                                >更新
+                                >{{ t('account.update') }}
                             </el-button>
                             <el-button
                                 v-if="scope.row.isShowUpdateSessionToken"
@@ -798,7 +719,7 @@
                                 type="primary"
                                 :loading="rowLoadingStateSessionToken[scope.row.email]"
                                 @click="handleUpdateSessionToken(scope.row)"
-                                >刷新60天令牌
+                                >{{ t('account.refresh60Days') }}
                             </el-button>
                         </template>
 
@@ -822,10 +743,10 @@
         <div class="footer">
             <!-- 功能操作区 -->
             <div class="toolbar">
-                <el-button type="success" size="small" plain @click="handleAdd">新增账号</el-button>
-                <el-button type="danger" size="small" plain @click="handleDeleteBatch">批量删除</el-button>
-                <el-button type="success" size="small" plain @click="handleImport">导入</el-button>
-                <el-button type="warning" size="small" plain @click="handleExport">导出</el-button>
+                <el-button type="success" size="small" plain @click="handleAdd">{{ t('account.addAccount') }}</el-button>
+                <el-button type="danger" size="small" plain @click="handleDeleteBatch">{{ t('account.batchDelete') }}</el-button>
+                <el-button type="success" size="small" plain @click="handleImport">{{ t('account.import') }}</el-button>
+                <el-button type="warning" size="small" plain @click="handleExport">{{ t('account.export') }}</el-button>
             </div>
 
             <!-- 分页控制区 -->
@@ -844,17 +765,17 @@
         </div>
 
         <!-- 新增/编辑对话框 -->
-        <el-dialog v-model="dialogVisible" title="新增账号" width="500px">
+        <el-dialog v-model="dialogVisible" :title="t('account.addAccount')" width="500px">
             <el-form ref="formRef" :model="accountForm" :rules="formRules" label-width="80px">
-                <el-form-item label="邮箱" prop="email">
-                    <el-input v-model="accountForm.email" placeholder="请输入邮箱地址" />
+                <el-form-item :label="t('account.email')" prop="email">
+                    <el-input v-model="accountForm.email" :placeholder="t('account.emailPlaceholder')" />
                 </el-form-item>
                 <el-form-item label="token" prop="accessToken">
                     <el-input
                         v-model="accountForm.accessToken"
                         type="textarea"
                         :rows="5"
-                        placeholder="请输入 accessToken 或 WorkosCursorSessionToken"
+                        :placeholder="t('account.tokenPlaceholder')"
                     />
                 </el-form-item>
                 <!-- 更多字段可以根据需要添加 -->
@@ -862,8 +783,8 @@
             <template #footer>
                 <span class="dialog-footer">
                     <!-- <el-button @click="importCurrentLoginAccount">添加当前Cursor登录账号</el-button> -->
-                    <el-button @click="dialogVisible = false">取消</el-button>
-                    <el-button type="primary" @click="submitForm">确定</el-button>
+                    <el-button @click="dialogVisible = false">{{ t('dialogs.cancel') }}</el-button>
+                    <el-button type="primary" @click="submitForm">{{ t('dialogs.confirm') }}</el-button>
                 </span>
             </template>
         </el-dialog>

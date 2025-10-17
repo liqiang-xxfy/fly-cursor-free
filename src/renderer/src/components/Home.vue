@@ -14,6 +14,11 @@
     import { Refresh, CircleCheck, WarningFilled, Delete } from "@element-plus/icons-vue";
     import { ElMessage, ElMessageBox } from "element-plus";
     import { jwtDecode } from "jwt-decode";
+    import { useI18n } from 'vue-i18n'; // Import useI18n
+    
+    // Initialize i18n
+    const { t } = useI18n();
+    
     const SUBSCRIBE_FREE_NAME = "free";
     const SUBSCRIBE_PRO_NAME = "free_trial";
 
@@ -78,7 +83,9 @@
         return `${ver}`.trim();
     });
 
-    const signatureText = computed(() => appLicenseInfo.value?.signature || "");
+    const signatureText = computed(() => {
+        return appLicenseInfo.value?.signature || "";
+    });
 
     const checkAdminRights = async () => {
         isAdmin.value = await window.api.checkAdminRights();
@@ -283,7 +290,7 @@
                 const remainingMilliseconds = expTimestamp - now;
                 if (remainingMilliseconds < 0) {
                     return {
-                        label: "已过期",
+                        label: t('home.expired'), // Use i18n
                         type: "danger",
                         isExpired: true,
                     };
@@ -291,7 +298,7 @@
                 const days = Math.floor(remainingMilliseconds / (1000 * 60 * 60 * 24));
                 if (days > 0) {
                     return {
-                        label: `${days}天`,
+                        label: `${days}${t('home.days')}`, // Use i18n
                         type: "success",
                         isExpired: false,
                     };
@@ -300,7 +307,7 @@
                 const hours = Math.floor(remainingMilliseconds / (1000 * 60 * 60));
                 if (hours > 0) {
                     return {
-                        label: `${hours}小时`,
+                        label: `${hours}${t('home.hours')}`, // Use i18n
                         type: "warning",
                         isExpired: false,
                     };
@@ -309,9 +316,9 @@
                 // 小于一小时，显示分钟。向上取整以避免显示0分钟。
                 const minutes = Math.ceil(remainingMilliseconds / (1000 * 60));
                 return {
-                    label: `${minutes}分钟`,
-                    type: "danger",
-                    isExpired: false,
+                        label: `${minutes}${t('home.minutes')}`, // Use i18n
+                        type: "danger",
+                        isExpired: false,
                 };
             }
         } catch {
@@ -367,16 +374,16 @@
     };
 
     const resetMachine = async () => {
-        ElMessageBox.confirm("确定要重置机器码？依赖机器码的软件可能失效，此操作需要管理员权限", "重置机器码", {
-            confirmButtonText: "确定",
-            cancelButtonText: "取消",
+        ElMessageBox.confirm(t('dialogs.resetMachineMessage'), t('dialogs.resetMachine'), {
+            confirmButtonText: t('dialogs.confirm'),
+            cancelButtonText: t('dialogs.cancel'),
             type: "warning",
         })
             .then(async () => {
                 await window.api.setRandomMachineInfo();
                 await appStore.fetchSystemInfo();
                 await appStore.fetchCursorInfo();
-                ElMessage.success("机器码已重置");
+                ElMessage.success(t('home.machineResetSuccess'));
             })
             .catch(() => {
                 // ElMessage.info("已取消重置机器码");
@@ -393,7 +400,7 @@
 
     const autoRegisterAndLogin = async () => {
         if (loadingAutoRegister.value) {
-            ElMessage.error("正在执行注册程序，请稍后再试");
+            ElMessage.error(t('home.registrationInProgress'));
             return;
         }
 
@@ -407,21 +414,21 @@
         const emailRegex =
             /[\w!#$%&'*+/=?^_`{|}~-]+(?:\.[\w!#$%&'*+/=?^_`{|}~-]+)*@(?:[\w](?:[\w-]*[\w])?\.)+[\w](?:[\w-]*[\w])?/;
         if (!emailRegex.test(RECEIVING_EMAIL)) {
-            ElMessage.error("收件邮箱格式不正确，请修改");
+            ElMessage.error(t('home.invalidEmailFormat'));
             settingsDialogVisible.value = true;
             return;
         }
 
-        ElMessageBox.confirm("确定要一键注册并使用新账号登录吗？此操作将重置机器码、覆盖登录账号。", "一键注册登录", {
-            confirmButtonText: "确定",
-            cancelButtonText: "取消",
+        ElMessageBox.confirm(t('dialogs.useAccountMessage'), t('dialogs.confirmUseAccount'), {
+            confirmButtonText: t('dialogs.confirm'),
+            cancelButtonText: t('dialogs.cancel'),
             type: "warning",
         })
             .then(() => {
                 try {
                     isAutoRegistAndLogin.value = true;
                     // ElMessage.success("已开始一键注册登录，请关注日志输出...");
-                    addLog({ data: "开始一键注册登录..." });
+                    addLog({ data: t('home.startingOneClickRegister') });
                     appStore.setIsAutoLoginFlow(true);
                     window.api.runAutoRegister({
                         email: RECEIVING_EMAIL,
@@ -431,8 +438,8 @@
                     });
                 } catch (e) {
                     console.error(e);
-                    ElMessage.error("一键注册登录过程中发生错误");
-                    addLog({ level: "error", data: `一键注册登录过程中发生错误: ${e.message}` });
+                    ElMessage.error(t('home.oneClickRegisterError'));
+                    addLog({ level: "error", data: `${t('home.oneClickRegisterError')}: ${e.message}` });
                     appStore.setIsAutoLoginFlow(false);
                 }
             })
@@ -443,7 +450,7 @@
 
     const autoRegister = async () => {
         if (loadingAutoRegister.value) {
-            ElMessage.error("正在执行注册程序，请稍后再试");
+            ElMessage.error(t('home.registrationInProgress'));
             return;
         }
 
@@ -457,23 +464,23 @@
         const emailRegex =
             /[\w!#$%&'*+/=?^_`{|}~-]+(?:\.[\w!#$%&'*+/=?^_`{|}~-]+)*@(?:[\w](?:[\w-]*[\w])?\.)+[\w](?:[\w-]*[\w])?/;
         if (!emailRegex.test(RECEIVING_EMAIL)) {
-            ElMessage.error("收件邮箱格式不正确，请修改");
+            ElMessage.error(t('home.invalidEmailFormat'));
             settingsDialogVisible.value = true;
             return;
         }
         loopCount.value = 1; // 重置循环次数
 
         let registerNum = appStore.appLicenseInfo?.license?.permissions?.registerNum || 2;
-        ElMessageBox.prompt("请输入批量注册的数量，注册过多可能被封域名", "批量自动注册", {
-            confirmButtonText: "确定",
-            cancelButtonText: "取消",
+        ElMessageBox.prompt(t('dialogs.registerCount'), t('dialogs.batchRegister'), {
+            confirmButtonText: t('dialogs.confirm'),
+            cancelButtonText: t('dialogs.cancel'),
             customClass: "auto-register-dialog",
             inputValue: loopCount.value,
             inputPattern: /^\d+$/,
             inputValidator: (value) => {
                 const num = Number(value);
                 if (!Number.isInteger(num) || num < 1 || num > registerNum) {
-                    return `请输入1到${registerNum}之间的整数`;
+                    return `${t('dialogs.enterNumberBetween')} 1 ${t('dialogs.and')} ${registerNum}`;
                 }
                 return true;
             },
@@ -493,8 +500,8 @@
                     });
                 } catch (e) {
                     console.error(e);
-                    ElMessage.error("批量自动注册过程中发生错误");
-                    addLog({ level: "error", data: `批量自动注册过程中发生错误: ${e.message}` });
+                    ElMessage.error(t('home.batchRegisterError'));
+                    addLog({ level: "error", data: `${t('home.batchRegisterError')}: ${e.message}` });
                 }
             })
             .catch(() => {
@@ -505,13 +512,13 @@
 
     const cancelAutoRegister = () => {
         if (loadingAutoRegister.value) {
-            ElMessageBox.confirm("正在执行注册程序，确定要取消吗？", "提示", {
-                confirmButtonText: "确定",
-                cancelButtonText: "取消",
+            ElMessageBox.confirm(t('dialogs.cancelRegisterMessage'), t('dialogs.cancelRegister'), {
+                confirmButtonText: t('dialogs.confirm'),
+                cancelButtonText: t('dialogs.cancel'),
                 type: "warning",
             }).then(async () => {
                 await window.api.cleanupAutoRegister();
-                addLog({ level: "warning", data: "正在取消自动注册程序..." });
+                addLog({ level: "warning", data: t('home.cancellingAutoRegister') });
             });
         }
     };
@@ -530,27 +537,27 @@
 <template>
     <div v-loading="isInitLoading" class="body-card">
         <el-tabs v-model="activeName" class="demo-tabs" @tab-click="handleClick">
-            <el-tab-pane label="首页" name="first">
+            <el-tab-pane :label="t('home.currentAccount')" name="first">
                 <div class="body-card-item">
                     <el-scrollbar>
                         <div class="card-container">
                             <el-card style="">
                                 <div class="card-header">
-                                    <span>当前登录账号</span>
+                                    <span>{{ t('home.currentAccount') }}</span>
                                 </div>
                                 <p class="card-item">
-                                    <span class="card-item-label">登录邮箱:</span>
+                                    <span class="card-item-label">{{ t('home.loginEmail') }}:</span>
                                     <span
                                         :class="{
                                             'is-expired': !cursorAccountsInfo.email,
                                             'is-trial': cursorAccountsInfo.email,
                                         }"
                                     >
-                                        {{ cursorAccountsInfo.email || "未登录" }}
+                                        {{ cursorAccountsInfo.email || t('home.notLoggedIn') }}
                                     </span>
                                 </p>
                                 <p class="card-item">
-                                    <span class="card-item-label">订阅状态:</span>
+                                    <span class="card-item-label">{{ t('home.subscriptionStatus') }}:</span>
                                     <span
                                         :class="{
                                             'is-expired': accountInfoShow.membershipType === SUBSCRIBE_FREE_NAME,
@@ -571,7 +578,7 @@
                                     </span>
                                 </p> -->
                                 <p class="card-item">
-                                    <span class="card-item-label">模型用量:</span>
+                                    <span class="card-item-label">{{ t('home.modelUsage') }}:</span>
                                     <template v-if="accountInfoShow.modelUsageTotal">
                                         <span
                                             >{{ accountInfoShow.modelUsageUsed }} /
@@ -594,7 +601,7 @@
                                         />
                                     </template>
                                     <template v-else>
-                                        <span class="is-trial">无限制</span>
+                                        <span class="is-trial">{{ t('home.noLimit') }}</span>
                                     </template>
                                 </p>
                                 <el-icon
@@ -607,10 +614,10 @@
                             </el-card>
                             <el-card style="">
                                 <div class="card-header">
-                                    <span>版本信息</span>
+                                    <span>{{ t('home.versionInfo') }}</span>
                                 </div>
                                 <p class="card-item">
-                                    <span class="card-item-label"> 版本: </span>
+                                    <span class="card-item-label"> {{ t('home.versionInfo') }}: </span>
                                     <span v-if="systemInfo.platform === 'win32'">Windows</span>
                                     <span v-else-if="systemInfo.platform === 'darwin'">Mac</span>
                                     <span v-else-if="systemInfo.platform === 'linux'">Linux</span>
@@ -623,11 +630,11 @@
                                 </p>
 
                                 <p class="card-item">
-                                    <span class="card-item-label">machineGuid:</span>
+                                    <span class="card-item-label">{{ t('home.machineGuid') }}:</span>
                                     <span class="card-item-value">{{ cursorAccountsInfo.machineGuid }}</span>
                                 </p>
                                 <p class="card-item">
-                                    <span class="card-item-label">machineId:</span>
+                                    <span class="card-item-label">{{ t('home.machineId') }}:</span>
                                     <span class="card-item-value">{{ cursorAccountsInfo.machineId }}</span>
                                 </p>
                                 <!-- <p class="card-item">
@@ -660,7 +667,7 @@
                         <div class="card-container">
                             <el-card style="">
                                 <div class="card-header" style="margin-bottom: 3px">
-                                    <span>功能</span>
+                                    <span>{{ t('home.features') }}</span>
                                 </div>
 
                                 <el-tooltip
@@ -671,12 +678,12 @@
                                             ? undefined
                                             : false
                                     "
-                                    content="设置域名后启用注册功能"
+                                    :content="t('home.domainSettingsTooltip')"
                                     effect="customized"
                                     placement="right"
                                 >
                                     <p class="card-item check-item">
-                                        <span class="card-item-label">设置域名和收验证码邮箱</span>
+                                        <span class="card-item-label">{{ t('home.domainSettings') }}</span>
                                         <span
                                             v-if="
                                                 appConfig.EMAIL_DOMAIN &&
@@ -698,12 +705,12 @@
 
                                 <el-tooltip
                                     :visible="!isAdmin ? undefined : false"
-                                    content="请以管理员身份启动，否则功能受限"
+                                    :content="t('home.adminRightsTooltip')"
                                     effect="customized"
                                     placement="right"
                                 >
                                     <p class="card-item check-item">
-                                        <span class="card-item-label">以管理员身份启动</span>
+                                        <span class="card-item-label">{{ t('home.adminRights') }}</span>
                                         <span v-if="isAdmin">
                                             <el-icon class="check-icon" :size="20" style="color: #67c23a"
                                                 ><CircleCheck
@@ -719,12 +726,12 @@
 
                                 <el-tooltip
                                     :visible="!appConfig.path_cursor_exe ? undefined : false"
-                                    content="未找到Cursor安装路径，打开Cursor后点击刷新重新查找"
+                                    :content="t('home.cursorPathTooltip')"
                                     effect="customized"
                                     placement="right"
                                 >
                                     <p class="card-item check-item">
-                                        <span class="card-item-label">获取 Cursor 安装路径</span>
+                                        <span class="card-item-label">{{ t('home.cursorPath') }}</span>
                                         <span v-if="appConfig.path_cursor_exe">
                                             <el-icon class="check-icon" :size="20" style="color: #67c23a"
                                                 ><CircleCheck
@@ -740,12 +747,12 @@
 
                                 <el-tooltip
                                     :visible="!appConfig.path_cursor_user_db ? undefined : false"
-                                    content="未找到Cursor数据文件路径，建议安装默认路径"
+                                    :content="t('home.cursorDataPathTooltip')"
                                     effect="customized"
                                     placement="right"
                                 >
                                     <p class="card-item check-item">
-                                        <span class="card-item-label">获取 Cursor 数据文件路径</span>
+                                        <span class="card-item-label">{{ t('home.cursorDataPath') }}</span>
                                         <span v-if="appConfig.path_cursor_user_db">
                                             <el-icon class="check-icon" :size="20" style="color: #67c23a"
                                                 ><CircleCheck
@@ -761,12 +768,12 @@
 
                                 <el-tooltip
                                     :visible="!appConfig.path_chrome ? undefined : false"
-                                    content="未找到浏览器路径，注册功能可能失败"
+                                    :content="t('home.chromePathTooltip')"
                                     effect="customized"
                                     placement="right"
                                 >
                                     <p class="card-item check-item">
-                                        <span class="card-item-label">获取 Chrome 浏览器路径</span>
+                                        <span class="card-item-label">{{ t('home.chromePath') }}</span>
                                         <span v-if="appConfig.path_chrome">
                                             <el-icon class="check-icon" :size="20" style="color: #67c23a"
                                                 ><CircleCheck
@@ -780,45 +787,45 @@
                                     </p>
                                 </el-tooltip>
                                 <p class="card-item btn-item">
-                                    <span class="card-item-label">一键注册登录</span>
+                                    <span class="card-item-label">{{ t('home.oneClickLogin') }}</span>
                                     <el-button
                                         v-if="loadingAutoRegister && isAutoRegistAndLogin === true"
                                         @click="cancelAutoRegister"
                                     >
-                                        取消
+                                        {{ t('home.cancel') }}
                                     </el-button>
                                     <el-button
                                         :loading="loadingAutoRegister && isAutoRegistAndLogin === true"
                                         @click="autoRegisterAndLogin"
-                                        >一键注册登录</el-button
+                                        >{{ t('home.oneClickLogin') }}</el-button
                                     >
                                 </p>
 
                                 <p class="card-item btn-item">
-                                    <span class="card-item-label">自动注册账号</span>
+                                    <span class="card-item-label">{{ t('home.autoRegister') }}</span>
                                     <el-button
                                         v-if="loadingAutoRegister && isAutoRegistAndLogin === false"
                                         @click="cancelAutoRegister"
                                     >
-                                        取消
+                                        {{ t('home.cancel') }}
                                     </el-button>
                                     <el-button
                                         :loading="loadingAutoRegister && isAutoRegistAndLogin === false"
                                         @click="autoRegister"
-                                        >批量自动注册</el-button
+                                        >{{ t('home.autoRegister') }}</el-button
                                     >
                                 </p>
                                 <p class="card-item btn-item">
-                                    <span class="card-item-label">重置机器码</span>
-                                    <el-button @click="resetMachine">重置机器码</el-button>
+                                    <span class="card-item-label">{{ t('home.resetMachine') }}</span>
+                                    <el-button @click="resetMachine">{{ t('home.resetMachine') }}</el-button>
                                 </p>
                                 <p class="card-item btn-item">
-                                    <span class="card-item-label">备份Cursor设置、快捷键...</span>
-                                    <el-button @click="backup">备份设置</el-button>
+                                    <span class="card-item-label">{{ t('home.backupSettings') }}</span>
+                                    <el-button @click="backup">{{ t('home.backupSettings') }}</el-button>
                                 </p>
                                 <p class="card-item btn-item">
-                                    <span class="card-item-label">备份恢复</span>
-                                    <el-button @click="restoreBackup">备份恢复</el-button>
+                                    <span class="card-item-label">{{ t('home.restoreBackup') }}</span>
+                                    <el-button @click="restoreBackup">{{ t('home.restoreBackup') }}</el-button>
                                 </p>
                                 <!-- <p class="card-item btn-item">
                                     <span class="card-item-label">阻止更新</span>
@@ -827,7 +834,7 @@
                             </el-card>
                             <el-card class="log-card" style="">
                                 <div class="card-header">
-                                    <span>日志</span>
+                                    <span>{{ t('home.logs') }}</span>
                                     <el-icon
                                         class="refresh-icon clear-logs-icon"
                                         style="font-size: 16px; right: 25px; top: 18px"
@@ -850,7 +857,7 @@
                     </el-scrollbar>
                 </div>
             </el-tab-pane>
-            <el-tab-pane label="账号" name="second">
+            <el-tab-pane :label="t('account.accounts')" name="second">
                 <div class="body-card-item">
                     <AccountManagement ref="accountManagementRef" @show-use-account-dialog="showUseAccountDialog" />
                 </div>
@@ -862,13 +869,13 @@
                     </el-scrollbar>
                 </div>
             </el-tab-pane> -->
-            <el-tab-pane label="设置" name="fourth">
+            <el-tab-pane :label="t('settings.settings')" name="fourth">
                 <div class="body-card-item">
                     <Settings ref="settingsRef" />
                 </div>
             </el-tab-pane>
 
-            <el-tab-pane label="关于" name="fifth">
+            <el-tab-pane :label="t('about.about')" name="fifth">
                 <el-scrollbar>
                     <div class="body-card-item" style="padding-top: 20px">
                         <div class="about-notice-container">
@@ -889,7 +896,7 @@
 
                         <div class="license-display">
                             <div>Fly Cursor {{ versionText }}</div>
-                            <div>联系QQ：3663856429</div>
+                            <div>{{ t('about.contact') }}：3663856429</div>
                             <div v-if="signatureText">{{ signatureText }}</div>
                         </div>
                     </div>

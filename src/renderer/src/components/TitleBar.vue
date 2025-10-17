@@ -6,6 +6,7 @@
                 <span class="title">Fly Cursor</span>
             </div>
             <div class="title-bar-right">
+                <LanguageSwitcher />
                 <div v-if="platform !== 'darwin'" class="window-controls">
                     <div class="control-button" @click.stop="minimizeWindow">
                         <img :src="minimizeIcon" alt="minimize" />
@@ -26,6 +27,7 @@
     import minimizeIcon from "../assets/image/minus.svg";
     import maximizeIcon from "../assets/image/max.svg";
     import closeIcon from "../assets/image/close.svg";
+    import LanguageSwitcher from './LanguageSwitcher.vue'; // Import LanguageSwitcher
 
     const platform = window.api.platform;
     const minimizeWindow = () => window.api.minimizeWindow();
